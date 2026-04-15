@@ -1,0 +1,108 @@
+# PII Scrubber
+
+> You are interacting with PII Scrubber, a service that detects and redacts Personally Identifiable Information from text.
+
+PII Scrubber scans text for sensitive data patterns — Social Security Numbers, email addresses, phone numbers, credit card numbers, API keys, passwords, and IP addresses. It can detect PII without modifying text, or scrub it by replacing matches with redaction markers like `[SSN REDACTED]`. Use it as post-processing middleware to prevent your agent from leaking sensitive data in responses.
+
+## How to Use (Step by Step)
+
+### Step 1: Scrub Agent Output
+After your agent generates a response, scrub it before returning to the user:
+```
+POST /scrub
+Content-Type: application/json
+
+{"text": "My SSN is 123-45-6789 and email is john@example.com"}
+```
+
+Response:
+```json
+{
+  "scrubbed_text": "My SSN is [SSN REDACTED] and email is [EMAIL REDACTED]",
+  "detections": [
+    {"category": "ssn", "description": "Social Security Number", "value_preview": "123-***"},
+    {"category": "email", "description": "Email address", "value_preview": "john***"}
+  ],
+  "total_redactions": 2
+}
+```
+
+### Step 2: Return Scrubbed Text
+Replace your agent's original response with `scrubbed_text`. Log `detections` for monitoring.
+
+### Alternative: Detect Only
+If you just want to check whether PII is present without modifying text:
+```
+POST /detect
+Content-Type: application/json
+
+{"text": "Call me at 555-123-4567"}
+```
+
+Response:
+```json
+{
+  "has_pii": true,
+  "detections": [{"category": "phone", "description": "Phone number", "value_preview": "555-***"}],
+  "total_found": 1
+}
+```
+
+## PII Categories
+
+| Category | Redaction Marker | Example Match |
+|---|---|---|
+| `ssn` | `[SSN REDACTED]` | `123-45-6789` |
+| `email` | `[EMAIL REDACTED]` | `john@example.com` |
+| `phone` | `[PHONE REDACTED]` | `555-123-4567`, `(555) 123-4567`, `+1-555-123-4567` |
+| `credit_card` | `[CREDIT CARD REDACTED]` | `4532-1234-5678-9010`, `4532 1234 5678 9010` |
+| `api_key` | `[API KEY REDACTED]` | `sk-abc123...`, `ghp_...`, `AIza...`, `AKIA...`, `xoxb-...` |
+| `password_in_text` | `[CREDENTIAL REDACTED]` | `password: secret123`, `token="abc123"` |
+| `ip_address` | `[IP REDACTED]` | `192.168.1.1` |
+
+## API Endpoints
+
+### POST /scrub
+Detect and redact all PII from text.
+- **Required**: `text` (string) — the text to scrub
+- **Optional**: `categories` (array of strings) — limit to specific PII types (default: all)
+- **Response**: `{scrubbed_text, detections: [{category, description, value_preview}], total_redactions}`
+- `value_preview` shows the first 4 characters + `***` for audit logging without exposing full PII.
+
+### POST /detect
+Detect PII without redacting.
+- **Required**: `text` (string) — the text to analyze
+- **Optional**: `categories` (array of strings) — limit to specific PII types (default: all)
+- **Response**: `{has_pii, detections: [{category, description, value_preview}], total_found}`
+
+### GET /patterns
+List all supported PII patterns with their redaction markers.
+- **Response**: `{patterns: {category: {description, replacement}}}`
+
+### GET /
+Service info and endpoint listing.
+- **Response**: `{service: "PII Scrubber", version: "1.0.0", endpoints: {...}}`
+
+## Integration
+
+Use as a **post_output** hook — scrub every agent response before it reaches the user:
+
+```python
+result = requests.post("https://pii-scrubber-production-6ed6.up.railway.app/scrub",
+    json={"text": agent_response}).json()
+
+safe_response = result["scrubbed_text"]
+if result["total_redactions"] > 0:
+    log.warning(f"PII leak prevented: {result['detections']}")
+```
+
+## Important Notes
+
+- No API key required. All endpoints are open (CORS: `*`).
+- Stateless — no data is stored. Each request is independent.
+- Use the `categories` filter to scrub only specific PII types (e.g. `["ssn", "email"]` to skip phone/IP).
+- API key detection covers OpenAI, GitHub, Google, AWS, and Slack key formats.
+
+## Links
+- Deployed: https://pii-scrubber-production-6ed6.up.railway.app
+- Source: https://github.com/Timi0217/pii-scrubber
