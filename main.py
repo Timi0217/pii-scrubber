@@ -54,7 +54,7 @@ PII_PATTERNS = {
             r"ghp_[a-zA-Z0-9]{36}|"
             r"gho_[a-zA-Z0-9]{36}|"
             r"AIza[a-zA-Z0-9_-]{35}|"
-            r"AKIA[A-Z0-9]{16}|"
+            r"AKIA[A-Z0-9]{12,24}|"
             r"xox[bpas]-[a-zA-Z0-9-]+)\b"
         ),
         "replacement": "[API KEY REDACTED]",
